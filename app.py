@@ -100,7 +100,7 @@ if "teacher_relief_count" not in st.session_state:
 if "optimization_results" not in st.session_state:
     st.session_state.optimization_results = {}
 
-# Fixed list of time frames for the school day
+# Updated time frames to reflect real school schedule with breaks and prayer
 TIME_FRAMES = [
     "8:00-8:30",
     "8:30-9:00",
@@ -110,6 +110,12 @@ TIME_FRAMES = [
     "10:30-11:00",
     "11:00-11:30",
     "11:30-12:00",
+    "12:00-12:30",
+    "12:30-1:00",
+    "1:00-2:00 (Prayer/Lunch)",  # Prayer/lunch break
+    "2:00-2:30",
+    "2:30-3:00",
+    "3:00-3:30",
 ]
 
 
@@ -120,65 +126,109 @@ def load_sample_data():
             "id": 1,
             "name": "Cikgu Rafiza",
             "subjects": ["Math", "Add Maths"],
-            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[3], TIME_FRAMES[5]],
+            # Free periods exclude break/prayer, simulate realistic schedule
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[3],
+                TIME_FRAMES[7],
+                TIME_FRAMES[12],
+            ],
             "constraints": "",
             "relief_count": 0,
+            "other_duties": [TIME_FRAMES[5]],  # Example: lab duty
         },
         {
             "id": 2,
             "name": "Cikgu Farid",
             "subjects": ["Chemistry", "Biology"],
-            "free_periods": [TIME_FRAMES[0], TIME_FRAMES[2], TIME_FRAMES[6]],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[2],
+                TIME_FRAMES[8],
+                TIME_FRAMES[13],
+            ],
             "constraints": "",
             "relief_count": 0,
+            "other_duties": [],
         },
         {
             "id": 3,
             "name": "Cikgu Riza",
             "subjects": ["English"],
-            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[4], TIME_FRAMES[7]],
+            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[4], TIME_FRAMES[9]],
             "constraints": "pregnant",
             "relief_count": 0,
+            "other_duties": [TIME_FRAMES[11]],  # Example: exam duty
         },
         {
             "id": 4,
             "name": "Cikgu Ahmad",
             "subjects": ["Sejarah", "Bahasa Melayu"],
-            "free_periods": [TIME_FRAMES[0], TIME_FRAMES[3], TIME_FRAMES[5]],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[3],
+                TIME_FRAMES[6],
+                TIME_FRAMES[10],
+            ],
             "constraints": "",
             "relief_count": 0,
+            "other_duties": [],
         },
         {
             "id": 5,
             "name": "Cikgu Meriani",
             "subjects": ["Prinsip Perakaunan", "Ekonomi"],
-            "free_periods": [TIME_FRAMES[2], TIME_FRAMES[4], TIME_FRAMES[6]],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[4],
+                TIME_FRAMES[8],
+                TIME_FRAMES[12],
+            ],
             "constraints": "no_upstairs",
             "relief_count": 0,
+            "other_duties": [],
         },
         {
             "id": 6,
             "name": "Cikgu Jamal",
             "subjects": ["Grafik Komunikasi Teknikal"],
-            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[3], TIME_FRAMES[7]],
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[3],
+                TIME_FRAMES[9],
+                TIME_FRAMES[13],
+            ],
             "constraints": "",
             "relief_count": 0,
+            "other_duties": [],
         },
         {
             "id": 7,
             "name": "Cikgu Nisa",
             "subjects": ["Perniagaan", "Pendidikan Seni Visual"],
-            "free_periods": [TIME_FRAMES[0], TIME_FRAMES[2], TIME_FRAMES[4]],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[2],
+                TIME_FRAMES[6],
+                TIME_FRAMES[10],
+            ],
             "constraints": "",
             "relief_count": 0,
+            "other_duties": [],
         },
         {
             "id": 8,
             "name": "Cikgu Omar",
             "subjects": ["Computer Science", "Geografi"],
-            "free_periods": [TIME_FRAMES[3], TIME_FRAMES[5], TIME_FRAMES[7]],
+            "free_periods": [
+                TIME_FRAMES[3],
+                TIME_FRAMES[5],
+                TIME_FRAMES[9],
+                TIME_FRAMES[12],
+            ],
             "constraints": "",
             "relief_count": 0,
+            "other_duties": [TIME_FRAMES[7]],  # Example: exam duty
         },
     ]
 
@@ -188,7 +238,7 @@ def load_sample_data():
     }
 
 
-def add_teacher(name, subjects, free_periods, constraints):
+def add_teacher(name, subjects, free_periods, constraints, other_duties=None):
     """Add new teacher"""
     teacher_id = len(st.session_state.teachers) + 1
     teacher = {
@@ -198,6 +248,7 @@ def add_teacher(name, subjects, free_periods, constraints):
         "free_periods": free_periods,
         "constraints": constraints,
         "relief_count": 0,
+        "other_duties": other_duties or [],
     }
     st.session_state.teachers.append(teacher)
     st.session_state.teacher_relief_count[teacher_id] = 0
@@ -230,6 +281,10 @@ def calculate_subject_match_score(teacher_subjects, absence_subject):
         ):
             return 1.0
     return 0.0
+
+
+# Add break/prayer periods and other duties exclusion in optimization
+BREAK_PRAYER_PERIODS = [TIME_FRAMES[10], TIME_FRAMES[11]]  # 12:30-1:00, 1:00-2:00
 
 
 def generate_schedule_with_pulp():
@@ -327,11 +382,37 @@ def generate_schedule_with_pulp():
     # Constraint 2: Teacher availability - can only be assigned if free during that period
     for teacher in teachers:
         for absence in absences:
-            if absence["period"] not in teacher["free_periods"]:
+            # Exclude break/prayer periods and other duties
+            if (
+                absence["period"] not in teacher["free_periods"]
+                or absence["period"] in BREAK_PRAYER_PERIODS
+                or (
+                    "other_duties" in teacher
+                    and absence["period"] in teacher["other_duties"]
+                )
+            ):
                 prob += (
                     x[teacher["id"], absence["id"]] == 0,
                     f"Teacher_{teacher['id']}_not_free_period_{absence['period']}_absence_{absence['id']}",
                 )
+
+    # Soft penalty: Avoid assigning relief immediately after own class unless consecutive
+    for teacher in teachers:
+        for absence in absences:
+            # Find if teacher has a class in the period immediately before this absence
+            try:
+                idx = TIME_FRAMES.index(absence["period"])
+                if idx > 0:
+                    prev_period = TIME_FRAMES[idx - 1]
+                    # If previous period is not a free period, add penalty
+                    if (
+                        prev_period not in teacher["free_periods"]
+                        and prev_period not in BREAK_PRAYER_PERIODS
+                    ):
+                        # Add a soft penalty to the objective coefficient
+                        objective_coeff[teacher["id"], absence["id"]] -= 5
+            except Exception:
+                pass
 
     # Constraint 3: Teacher cannot cover their own absence
     for teacher in teachers:
@@ -554,12 +635,22 @@ def main():
                 ["", "no_upstairs", "pregnant", "MC"],
                 key="add_teacher_constraints",
             )
-
+            other_duties_input = st.multiselect(
+                "Other Duties (lab, exam, etc.) - select time frames",
+                TIME_FRAMES,
+                key="add_teacher_other_duties",
+            )
             submitted = st.form_submit_button("Add Teacher")
             if submitted and teacher_name:
                 subjects = subjects_input
                 free_periods = periods_input
-                add_teacher(teacher_name, subjects, free_periods, constraints)
+                add_teacher(
+                    teacher_name,
+                    subjects,
+                    free_periods,
+                    constraints,
+                    other_duties_input,
+                )
                 st.success(f"Added {teacher_name}!")
                 st.rerun()
 
@@ -576,6 +667,8 @@ def main():
                 )
                 if teacher["constraints"]:
                     st.write(f"**Constraints:** {teacher['constraints']}")
+                if teacher.get("other_duties"):
+                    st.write(f"**Other Duties:** {', '.join(teacher['other_duties'])}")
                 if st.button("Remove Teacher", key=f"remove_teacher_{i}"):
                     st.session_state.teachers.pop(i)
                     st.session_state.teacher_relief_count.pop(teacher["id"], None)
@@ -807,10 +900,10 @@ def main():
     with st.expander("🧠 About the Algorithm"):
         st.markdown(
             f"""
-        ### How the Algorithm Works (Phase 1):
+        ### How the Algorithm Works (Phase 1)
 
         **Absence Model:**
-        - Each absence entry cover multiple periods (time frames).
+        - Each absence entry can cover multiple periods (time frames).
         - The scheduler expands each absence into individual period-based relief needs for optimization.
         - The UI shows one absence per teacher per day, but the schedule assigns relief for each selected period.
 
@@ -819,7 +912,8 @@ def main():
         - Subject match: +20 points for matching subjects
         - Base assignment: +10 points per assignment
         - Fair distribution: -5 points per existing relief count
-        - Constraint penalties: Medical (-1000), Pregnant (-15), No upstairs (-5)
+        - Penalties for constraints: Medical (-1000), Pregnant (-15), No upstairs (-5)
+        - Soft penalty: -5 if relief is assigned immediately after a teacher's own class (unless consecutive)
 
         **Hard Constraints:**
         1. Each period of absence assigned to at most one relief teacher
@@ -828,9 +922,15 @@ def main():
         4. Medical exemption teachers cannot be assigned
         5. Fair distribution limits per teacher
         6. Pregnant teachers limited to max 1 assignment per day
+        7. No relief assignments during break/prayer periods (e.g., 1:00-2:00)
+        8. No relief assignments if teacher has other duties (lab, exam, etc.) during that period
+
+        **Additional Features:**
+        - Teachers' free periods and other duties are customizable in the UI.
+        - Break/prayer periods are excluded from relief assignment.
 
         **Optimization Engine:**
-        - Uses CBC (Coin-or Branch and Cut) solver
+        - Uses CBC (Coin-or Branch and Cut) solver via PuLP
         - Binary decision variables for each teacher-absence-period pair
         - Guarantees optimal solution within constraints
         - Handles complex constraint interactions automatically
