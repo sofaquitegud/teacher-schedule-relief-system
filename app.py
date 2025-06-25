@@ -100,6 +100,18 @@ if "teacher_relief_count" not in st.session_state:
 if "optimization_results" not in st.session_state:
     st.session_state.optimization_results = {}
 
+# Fixed list of time frames for the school day
+TIME_FRAMES = [
+    "8:00-8:30",
+    "8:30-9:00",
+    "9:00-9:30",
+    "9:30-10:00",
+    "10:00-10:30",
+    "10:30-11:00",
+    "11:00-11:30",
+    "11:30-12:00",
+]
+
 
 def load_sample_data():
     """Load sample teacher data"""
@@ -108,7 +120,7 @@ def load_sample_data():
             "id": 1,
             "name": "Cikgu Rafiza",
             "subjects": ["Math", "Add Maths"],
-            "free_periods": [2, 4, 6],
+            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[3], TIME_FRAMES[5]],
             "constraints": "",
             "relief_count": 0,
         },
@@ -116,7 +128,7 @@ def load_sample_data():
             "id": 2,
             "name": "Cikgu Farid",
             "subjects": ["Chemistry", "Biology"],
-            "free_periods": [1, 3, 7],
+            "free_periods": [TIME_FRAMES[0], TIME_FRAMES[2], TIME_FRAMES[6]],
             "constraints": "",
             "relief_count": 0,
         },
@@ -124,7 +136,7 @@ def load_sample_data():
             "id": 3,
             "name": "Cikgu Riza",
             "subjects": ["English"],
-            "free_periods": [2, 5, 8],
+            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[4], TIME_FRAMES[7]],
             "constraints": "pregnant",
             "relief_count": 0,
         },
@@ -132,7 +144,7 @@ def load_sample_data():
             "id": 4,
             "name": "Cikgu Ahmad",
             "subjects": ["Sejarah", "Bahasa Melayu"],
-            "free_periods": [1, 4, 6],
+            "free_periods": [TIME_FRAMES[0], TIME_FRAMES[3], TIME_FRAMES[5]],
             "constraints": "",
             "relief_count": 0,
         },
@@ -140,7 +152,7 @@ def load_sample_data():
             "id": 5,
             "name": "Cikgu Meriani",
             "subjects": ["Prinsip Perakaunan", "Ekonomi"],
-            "free_periods": [3, 5, 7],
+            "free_periods": [TIME_FRAMES[2], TIME_FRAMES[4], TIME_FRAMES[6]],
             "constraints": "no_upstairs",
             "relief_count": 0,
         },
@@ -148,7 +160,7 @@ def load_sample_data():
             "id": 6,
             "name": "Cikgu Jamal",
             "subjects": ["Grafik Komunikasi Teknikal"],
-            "free_periods": [2, 4, 8],
+            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[3], TIME_FRAMES[7]],
             "constraints": "",
             "relief_count": 0,
         },
@@ -156,7 +168,7 @@ def load_sample_data():
             "id": 7,
             "name": "Cikgu Nisa",
             "subjects": ["Perniagaan", "Pendidikan Seni Visual"],
-            "free_periods": [1, 3, 5],
+            "free_periods": [TIME_FRAMES[0], TIME_FRAMES[2], TIME_FRAMES[4]],
             "constraints": "",
             "relief_count": 0,
         },
@@ -164,7 +176,7 @@ def load_sample_data():
             "id": 8,
             "name": "Cikgu Omar",
             "subjects": ["Computer Science", "Geografi"],
-            "free_periods": [4, 6, 8],
+            "free_periods": [TIME_FRAMES[3], TIME_FRAMES[5], TIME_FRAMES[7]],
             "constraints": "",
             "relief_count": 0,
         },
@@ -191,8 +203,8 @@ def add_teacher(name, subjects, free_periods, constraints):
     st.session_state.teacher_relief_count[teacher_id] = 0
 
 
-def add_absence(teacher_id, subject, period):
-    """Add teacher absence"""
+def add_absence(teacher_id, subject, periods):
+    """Add teacher absence for multiple periods"""
     teacher = next(
         (t for t in st.session_state.teachers if t["id"] == teacher_id), None
     )
@@ -202,7 +214,7 @@ def add_absence(teacher_id, subject, period):
             "teacher_id": teacher_id,
             "teacher_name": teacher["name"],
             "subject": subject,
-            "period": period,
+            "periods": periods,  # list of time frames
             "assigned": False,
             "relief_teacher": None,
         }
@@ -229,12 +241,28 @@ def generate_schedule_with_pulp():
     if not st.session_state.absences or not st.session_state.teachers:
         return
 
+    # Expand absences: each period in an absence becomes a separate assignment need
+    expanded_absences = []
+    for absence in st.session_state.absences:
+        for period in absence["periods"]:
+            expanded_absences.append(
+                {
+                    "id": f"{absence['id']}_{period}",
+                    "teacher_id": absence["teacher_id"],
+                    "teacher_name": absence["teacher_name"],
+                    "subject": absence["subject"],
+                    "period": period,
+                    "assigned": False,
+                    "relief_teacher": None,
+                }
+            )
+
     # Create the optimization problem
     prob = pulp.LpProblem("Teacher_Relief_Assignment", pulp.LpMaximize)
 
     # Sets
     teachers = st.session_state.teachers
-    absences = st.session_state.absences
+    absences = expanded_absences
 
     # Decision variables: x[i,j] = 1 if teacher i is assigned to absence j
     x = {}
@@ -374,13 +402,15 @@ def generate_schedule_with_pulp():
                 st.session_state.teacher_relief_count[teacher["id"]] += 1
 
                 # Mark absence as assigned
-                absence["assigned"] = True
-                absence["relief_teacher"] = teacher["name"]
-                break
+                # (not used in expanded absences, but kept for compatibility)
 
     # Add unassigned absences
     for absence in absences:
-        if not absence["assigned"]:
+        assigned = any(
+            r["absence_id"] == absence["id"] and r["status"] == "assigned"
+            for r in st.session_state.relief_schedule
+        )
+        if not assigned:
             relief_assignment = {
                 "absence_id": absence["id"],
                 "absent_teacher": absence["teacher_name"],
@@ -497,8 +527,8 @@ def main():
             subjects_input = st.text_input(
                 "Subjects (comma-separated)", placeholder="Math, Physics, Chemistry"
             )
-            periods_input = st.text_input(
-                "Free Periods (comma-separated)", placeholder="1, 3, 5, 7"
+            periods_input = st.multiselect(
+                "Free Periods (select one or more time frames)", TIME_FRAMES
             )
             constraints = st.selectbox(
                 "Constraints", ["", "no_upstairs", "pregnant", "MC"]
@@ -507,11 +537,7 @@ def main():
             submitted = st.form_submit_button("Add Teacher")
             if submitted and teacher_name:
                 subjects = [s.strip() for s in subjects_input.split(",") if s.strip()]
-                free_periods = [
-                    int(p.strip())
-                    for p in periods_input.split(",")
-                    if p.strip().isdigit()
-                ]
+                free_periods = periods_input
                 add_teacher(teacher_name, subjects, free_periods, constraints)
                 st.success(f"Added {teacher_name}!")
                 st.rerun()
@@ -538,7 +564,7 @@ def main():
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.header("📚 Daily Absence Input")
+        st.header("\U0001f4da Daily Absence Input")
 
         schedule_date = st.date_input("Schedule Date", value=date.today())
 
@@ -558,13 +584,13 @@ def main():
                 selected_subjects = st.multiselect(
                     "Subject", all_subjects, max_selections=1
                 )
-                period = st.number_input("Period", min_value=1, max_value=8, value=1)
+                periods = st.multiselect("Periods (Time Frames)", TIME_FRAMES)
 
                 submitted = st.form_submit_button("Add Absence")
-                if submitted and selected_teacher and selected_subjects:
+                if submitted and selected_teacher and selected_subjects and periods:
                     teacher_id = teacher_options[selected_teacher]
                     subject = selected_subjects[0]  # Only one subject allowed
-                    add_absence(teacher_id, subject, period)
+                    add_absence(teacher_id, subject, periods)
                     st.success("Absence Added!")
                     st.rerun()
         else:
@@ -577,7 +603,7 @@ def main():
                 st.markdown(
                     f"""
                 <div class="absence-card">
-                    <strong>{absence['teacher_name']}</strong> - {absence['subject']} (Period {absence['period']})
+                    <strong>{absence['teacher_name']}</strong> - {absence['subject']} (Periods: {', '.join(absence['periods'])})
                 </div>
                 """,
                     unsafe_allow_html=True,
@@ -655,11 +681,15 @@ def main():
 
     # Relief Schedule Results
     if st.session_state.relief_schedule:
-        st.header("📋 Optimized Relief Schedule")
+        st.header("\U0001f4cb Optimized Relief Schedule")
 
         # Create DataFrame for better display
         df = pd.DataFrame(st.session_state.relief_schedule)
-        df = df.sort_values("period")
+        # Sort by time frame order
+        df["period_order"] = df["period"].apply(
+            lambda x: TIME_FRAMES.index(x) if x in TIME_FRAMES else -1
+        )
+        df = df.sort_values("period_order")
 
         # Display assignment scores
         display_df = df[
@@ -673,7 +703,7 @@ def main():
             ]
         ].copy()
         display_df.columns = [
-            "Period",
+            "Period (Time Frame)",
             "Absent Teacher",
             "Subject",
             "Relief Teacher",
@@ -753,29 +783,34 @@ def main():
                     st.warning("No relief assignments to notify about.")
 
     # Information about the algorithm
-    with st.expander("🧠 About the PuLP Optimization Algorithm"):
+    with st.expander("🧠 About the Algorithm"):
         st.markdown(
-            """
-        ### How the PuLP Algorithm Works:
-        
+            f"""
+        ### How the Algorithm Works (Phase 1):
+
+        **Absence Model:**
+        - Each absence entry cover multiple periods (time frames).
+        - The scheduler expands each absence into individual period-based relief needs for optimization.
+        - The UI shows one absence per teacher per day, but the schedule assigns relief for each selected period.
+
         **Objective Function:**
-        - Maximizes total assignment score across all relief assignments
+        - Maximizes total assignment score across all relief assignments (per period)
         - Subject match: +20 points for matching subjects
         - Base assignment: +10 points per assignment
         - Fair distribution: -5 points per existing relief count
         - Constraint penalties: Medical (-1000), Pregnant (-15), No upstairs (-5)
-        
+
         **Hard Constraints:**
-        1. Each absence assigned to at most one teacher
-        2. Teachers only assigned during their free periods
+        1. Each period of absence assigned to at most one relief teacher
+        2. Teachers only assigned during their free periods (time frames)
         3. Teachers cannot cover their own absences
         4. Medical exemption teachers cannot be assigned
         5. Fair distribution limits per teacher
-        6. Pregnant teachers limited to max 1 assignment
-        
+        6. Pregnant teachers limited to max 1 assignment per day
+
         **Optimization Engine:**
         - Uses CBC (Coin-or Branch and Cut) solver
-        - Binary decision variables for each teacher-absence pair
+        - Binary decision variables for each teacher-absence-period pair
         - Guarantees optimal solution within constraints
         - Handles complex constraint interactions automatically
         """
