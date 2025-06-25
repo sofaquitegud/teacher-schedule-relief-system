@@ -561,11 +561,6 @@ def main():
                 free_periods = periods_input
                 add_teacher(teacher_name, subjects, free_periods, constraints)
                 st.success(f"Added {teacher_name}!")
-                # Clear the form fields by resetting their keys
-                st.session_state["add_teacher_name"] = ""
-                st.session_state["add_teacher_subjects"] = []
-                st.session_state["add_teacher_periods"] = []
-                st.session_state["add_teacher_constraints"] = ""
                 st.rerun()
 
     # Display current teachers
