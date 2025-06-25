@@ -523,23 +523,49 @@ def main():
 
         st.subheader("Add New Teacher")
         with st.form("add_teacher_form"):
-            teacher_name = st.text_input("Teacher Name")
-            subjects_input = st.text_input(
-                "Subjects (comma-separated)", placeholder="Math, Physics, Chemistry"
+            teacher_name = st.text_input("Teacher Name", key="add_teacher_name")
+            subjects_input = st.multiselect(
+                "Subjects (select one or more)",
+                [
+                    "Math",
+                    "Add Maths",
+                    "Chemistry",
+                    "Biology",
+                    "English",
+                    "Sejarah",
+                    "Bahasa Melayu",
+                    "Prinsip Perakaunan",
+                    "Ekonomi",
+                    "Grafik Komunikasi Teknikal",
+                    "Perniagaan",
+                    "Pendidikan Seni Visual",
+                    "Computer Science",
+                    "Geografi",
+                ],
+                key="add_teacher_subjects",
             )
             periods_input = st.multiselect(
-                "Free Periods (select one or more time frames)", TIME_FRAMES
+                "Free Periods (select one or more time frames)",
+                TIME_FRAMES,
+                key="add_teacher_periods",
             )
             constraints = st.selectbox(
-                "Constraints", ["", "no_upstairs", "pregnant", "MC"]
+                "Constraints",
+                ["", "no_upstairs", "pregnant", "MC"],
+                key="add_teacher_constraints",
             )
 
             submitted = st.form_submit_button("Add Teacher")
             if submitted and teacher_name:
-                subjects = [s.strip() for s in subjects_input.split(",") if s.strip()]
+                subjects = subjects_input
                 free_periods = periods_input
                 add_teacher(teacher_name, subjects, free_periods, constraints)
                 st.success(f"Added {teacher_name}!")
+                # Clear the form fields by resetting their keys
+                st.session_state["add_teacher_name"] = ""
+                st.session_state["add_teacher_subjects"] = []
+                st.session_state["add_teacher_periods"] = []
+                st.session_state["add_teacher_constraints"] = ""
                 st.rerun()
 
     # Display current teachers
