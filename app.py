@@ -9,6 +9,9 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 import pulp
 import numpy as np
+import xml.etree.ElementTree as ET
+import tempfile
+import os
 
 # Configure Streamlit page
 st.set_page_config(
@@ -581,6 +584,90 @@ def create_pdf_report(schedule_date):
     return buffer
 
 
+def import_asc_timetables_data(uploaded_file):
+    """Import teacher schedules from ASC Timetables export file (XML or Excel)"""
+    teachers_data = []
+
+    try:
+        file_ext = uploaded_file.name.split(".")[-1].lower()
+
+        if file_ext == "xml":
+            # Process XML file
+            tree = ET.parse(uploaded_file)
+            root = tree.getroot()
+
+            for teacher in root.findall(
+                ".//Teacher"
+            ):  # Adjust xpath based on actual XML structure
+                teacher_data = {
+                    "id": len(st.session_state.teachers) + 1,
+                    "name": teacher.get("name", ""),
+                    "subjects": [],
+                    "free_periods": [],
+                    "constraints": "",
+                    "relief_count": 0,
+                    "other_duties": [],
+                }
+
+                # Extract subjects
+                for subject in teacher.findall(".//Subject"):
+                    teacher_data["subjects"].append(subject.get("name", ""))
+
+                # Extract free periods by checking periods without lessons
+                all_periods = set(TIME_FRAMES)
+                busy_periods = set()
+                for lesson in teacher.findall(".//Lesson"):
+                    period = lesson.get(
+                        "period", ""
+                    )  # Adjust based on actual XML structure
+                    if period in TIME_FRAMES:
+                        busy_periods.add(period)
+
+                teacher_data["free_periods"] = list(all_periods - busy_periods)
+                teachers_data.append(teacher_data)
+
+        elif file_ext in ["xlsx", "xls"]:
+            # Process Excel file
+            df = pd.read_excel(uploaded_file)
+
+            # Assuming Excel structure has columns: Teacher, Subject, Period
+            for teacher_name in df["Teacher"].unique():
+                teacher_data = {
+                    "id": len(st.session_state.teachers) + 1,
+                    "name": teacher_name,
+                    "subjects": df[df["Teacher"] == teacher_name]["Subject"]
+                    .unique()
+                    .tolist(),
+                    "free_periods": [],
+                    "constraints": "",
+                    "relief_count": 0,
+                    "other_duties": [],
+                }
+
+                # Calculate free periods
+                busy_periods = set(df[df["Teacher"] == teacher_name]["Period"].tolist())
+                all_periods = set(TIME_FRAMES)
+                teacher_data["free_periods"] = list(all_periods - busy_periods)
+
+                teachers_data.append(teacher_data)
+
+        if teachers_data:
+            # Update session state with imported teachers
+            st.session_state.teachers.extend(teachers_data)
+            st.session_state.teacher_relief_count.update(
+                {teacher["id"]: 0 for teacher in teachers_data}
+            )
+
+            return len(teachers_data)
+        else:
+            st.warning("No teacher data found in the uploaded file.")
+            return 0
+
+    except Exception as e:
+        st.error(f"Error importing data: {str(e)}")
+        return 0
+
+
 def main():
     # Header
     st.markdown(
@@ -596,6 +683,22 @@ def main():
     # Sidebar for teacher management
     with st.sidebar:
         st.header("👥 Teacher Management")
+
+        # Add file uploader for ASC Timetables data
+        st.subheader("Import from ASC Timetables")
+        uploaded_file = st.file_uploader(
+            "Upload ASC Timetables export (XML or Excel)",
+            type=["xml", "xlsx", "xls"],
+            help="Upload your exported timetable data from ASC Timetables. The file should contain teacher schedules exported from ASC Timetables.",
+        )
+
+        if uploaded_file is not None:
+            if st.button("Import Timetable Data"):
+                with st.spinner("Importing timetable data..."):
+                    num_imported = import_asc_timetables_data(uploaded_file)
+                    if num_imported > 0:
+                        st.success(f"Successfully imported {num_imported} teachers!")
+                        st.rerun()
 
         if st.button("📚 Load Sample Data", type="primary"):
             load_sample_data()
