@@ -12,6 +12,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 import tempfile
 import os
+from collections import defaultdict
 
 # Configure Streamlit page
 st.set_page_config(
@@ -114,7 +115,7 @@ TIME_FRAMES = [
     "11:00-11:30",
     "11:30-12:00",
     "12:00-12:30",
-    "12:30-1:00",
+    "12:30-1:00 (Prayer/Lunch)",  # Prayer/lunch break
     "1:00-2:00 (Prayer/Lunch)",  # Prayer/lunch break
     "2:00-2:30",
     "2:30-3:00",
@@ -129,7 +130,6 @@ def load_sample_data():
             "id": 1,
             "name": "Cikgu Rafiza",
             "subjects": ["Math", "Add Maths"],
-            # Free periods exclude break/prayer, simulate realistic schedule
             "free_periods": [
                 TIME_FRAMES[1],
                 TIME_FRAMES[3],
@@ -138,7 +138,7 @@ def load_sample_data():
             ],
             "constraints": "",
             "relief_count": 0,
-            "other_duties": [TIME_FRAMES[5]],  # Example: lab duty
+            "other_duties": [TIME_FRAMES[5]],
         },
         {
             "id": 2,
@@ -161,7 +161,7 @@ def load_sample_data():
             "free_periods": [TIME_FRAMES[1], TIME_FRAMES[4], TIME_FRAMES[9]],
             "constraints": "pregnant",
             "relief_count": 0,
-            "other_duties": [TIME_FRAMES[11]],  # Example: exam duty
+            "other_duties": [TIME_FRAMES[11]],
         },
         {
             "id": 4,
@@ -231,7 +231,246 @@ def load_sample_data():
             ],
             "constraints": "",
             "relief_count": 0,
-            "other_duties": [TIME_FRAMES[7]],  # Example: exam duty
+            "other_duties": [TIME_FRAMES[7]],
+        },
+        # --- Additional teachers for realistic simulation ---
+        {
+            "id": 9,
+            "name": "Cikgu Siti",
+            "subjects": ["Math", "Science"],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[6],
+                TIME_FRAMES[8],
+                TIME_FRAMES[11],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 10,
+            "name": "Cikgu Zainal",
+            "subjects": ["Physics"],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[5],
+                TIME_FRAMES[10],
+                TIME_FRAMES[13],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 11,
+            "name": "Cikgu Aina",
+            "subjects": ["Biology", "Science"],
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[4],
+                TIME_FRAMES[7],
+                TIME_FRAMES[12],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[8]],
+        },
+        {
+            "id": 12,
+            "name": "Cikgu Hafiz",
+            "subjects": ["English", "Literature"],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[5],
+                TIME_FRAMES[9],
+                TIME_FRAMES[13],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 13,
+            "name": "Cikgu Nor",
+            "subjects": ["Bahasa Melayu", "Moral"],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[3],
+                TIME_FRAMES[6],
+                TIME_FRAMES[10],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[1]],
+        },
+        {
+            "id": 14,
+            "name": "Cikgu Faizal",
+            "subjects": ["History", "Sejarah"],
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[4],
+                TIME_FRAMES[8],
+                TIME_FRAMES[11],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 15,
+            "name": "Cikgu Liyana",
+            "subjects": ["Math", "ICT"],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[5],
+                TIME_FRAMES[7],
+                TIME_FRAMES[12],
+            ],
+            "constraints": "pregnant",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 16,
+            "name": "Cikgu Roslan",
+            "subjects": ["Pendidikan Islam", "Moral"],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[3],
+                TIME_FRAMES[6],
+                TIME_FRAMES[10],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[9]],
+        },
+        {
+            "id": 17,
+            "name": "Cikgu Shima",
+            "subjects": ["Science", "Math"],
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[4],
+                TIME_FRAMES[8],
+                TIME_FRAMES[13],
+            ],
+            "constraints": "no_upstairs",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 18,
+            "name": "Cikgu Daniel",
+            "subjects": ["English", "Geografi"],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[5],
+                TIME_FRAMES[9],
+                TIME_FRAMES[12],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[11]],
+        },
+        {
+            "id": 19,
+            "name": "Cikgu Aisyah",
+            "subjects": ["Ekonomi", "Prinsip Perakaunan"],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[3],
+                TIME_FRAMES[7],
+                TIME_FRAMES[10],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 20,
+            "name": "Cikgu Syed",
+            "subjects": ["Pendidikan Jasmani", "Sivik"],
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[4],
+                TIME_FRAMES[8],
+                TIME_FRAMES[13],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[2]],
+        },
+        {
+            "id": 21,
+            "name": "Cikgu Lim",
+            "subjects": ["Chinese", "Math"],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[5],
+                TIME_FRAMES[9],
+                TIME_FRAMES[12],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 22,
+            "name": "Cikgu Kumar",
+            "subjects": ["Tamil", "Science"],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[3],
+                TIME_FRAMES[6],
+                TIME_FRAMES[10],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[7]],
+        },
+        {
+            "id": 23,
+            "name": "Cikgu Halimah",
+            "subjects": ["Math", "Add Maths"],
+            "free_periods": [
+                TIME_FRAMES[1],
+                TIME_FRAMES[4],
+                TIME_FRAMES[8],
+                TIME_FRAMES[13],
+            ],
+            "constraints": "MC",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 24,
+            "name": "Cikgu Zuraida",
+            "subjects": ["Science", "Biology"],
+            "free_periods": [
+                TIME_FRAMES[2],
+                TIME_FRAMES[5],
+                TIME_FRAMES[7],
+                TIME_FRAMES[12],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [],
+        },
+        {
+            "id": 25,
+            "name": "Cikgu Rahman",
+            "subjects": ["Physics", "Math"],
+            "free_periods": [
+                TIME_FRAMES[0],
+                TIME_FRAMES[3],
+                TIME_FRAMES[6],
+                TIME_FRAMES[10],
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "other_duties": [TIME_FRAMES[5]],
         },
     ]
 
@@ -507,6 +746,55 @@ def generate_schedule_with_pulp():
             }
             st.session_state.relief_schedule.append(relief_assignment)
 
+    # --- Post-processing: Combine unassigned classes in the same period ---
+    # 1. Group unassigned absences by period
+    period_to_unassigned = defaultdict(list)
+    for r in st.session_state.relief_schedule:
+        if r["status"] == "unassigned":
+            period_to_unassigned[r["period"]].append(r)
+
+    # 2. For each period with >1 unassigned, try to assign one available teacher to all
+    for period, unassigned_list in period_to_unassigned.items():
+        if len(unassigned_list) < 2:
+            continue  # Only combine if more than one unassigned
+        # Find available teacher for this period
+        available_teacher = None
+        for teacher in teachers:
+            # Skip if MC or not free or has other duties or already assigned to relief in this period
+            if teacher["constraints"] == "MC":
+                continue
+            if period not in teacher["free_periods"]:
+                continue
+            if "other_duties" in teacher and period in teacher["other_duties"]:
+                continue
+            # Check if already assigned to relief in this period
+            already_assigned = any(
+                r["relief_teacher_id"] == teacher["id"]
+                and r["period"] == period
+                and r["status"] == "assigned"
+                for r in st.session_state.relief_schedule
+            )
+            if already_assigned:
+                continue
+            # Cannot cover own absence
+            if any(r["absent_teacher"] == teacher["name"] for r in unassigned_list):
+                continue
+            available_teacher = teacher
+            break
+        if available_teacher:
+            # Assign this teacher to all unassigned in this period
+            for r in unassigned_list:
+                r["relief_teacher"] = available_teacher["name"]
+                r["relief_teacher_id"] = available_teacher["id"]
+                r["status"] = "assigned"
+                r["assignment_score"] = (
+                    1  # Mark as special assignment (can adjust score logic)
+                )
+            available_teacher["relief_count"] += len(unassigned_list)
+            st.session_state.teacher_relief_count[available_teacher["id"]] += len(
+                unassigned_list
+            )
+
 
 def create_pdf_report(schedule_date):
     """Create PDF report of the relief schedule"""
@@ -689,7 +977,7 @@ def main():
         uploaded_file = st.file_uploader(
             "Upload ASC Timetables export (XML or Excel)",
             type=["xml", "xlsx", "xls"],
-            help="Upload your exported timetable data from ASC Timetables. The file should contain teacher schedules exported from ASC Timetables.",
+            help="Upload your exported timetable data from ASC Timetables.",
         )
 
         if uploaded_file is not None:
