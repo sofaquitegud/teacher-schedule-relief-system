@@ -757,24 +757,15 @@ def generate_schedule_with_pulp():
     for period, unassigned_list in period_to_unassigned.items():
         if len(unassigned_list) < 2:
             continue  # Only combine if more than one unassigned
-        # Find available teacher for this period
+        # Find available teacher for this period (allow assigning even if already assigned in this period)
         available_teacher = None
         for teacher in teachers:
-            # Skip if MC or not free or has other duties or already assigned to relief in this period
+            # Skip if MC or not free or has other duties
             if teacher["constraints"] == "MC":
                 continue
             if period not in teacher["free_periods"]:
                 continue
             if "other_duties" in teacher and period in teacher["other_duties"]:
-                continue
-            # Check if already assigned to relief in this period
-            already_assigned = any(
-                r["relief_teacher_id"] == teacher["id"]
-                and r["period"] == period
-                and r["status"] == "assigned"
-                for r in st.session_state.relief_schedule
-            )
-            if already_assigned:
                 continue
             # Cannot cover own absence
             if any(r["absent_teacher"] == teacher["name"] for r in unassigned_list):
