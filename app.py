@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 import tempfile
 import os
 from collections import defaultdict
+from itertools import groupby
 
 # Configure Streamlit page
 st.set_page_config(
@@ -122,378 +123,413 @@ TIME_FRAMES = [
     "3:00-3:30",
 ]
 
+# --- Class Location and School Structure ---
+FORMS = [f"Form {i}" for i in range(1, 6)]
+CLASS_NAMES = ["Amanah", "Bestari", "Cekal", "Dedikasi", "Efisien", "Fitrah"]
+BLOCKS = ["Block A", "Block B", "Block C"]
+FLOORS = ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor"]
+SPECIAL_ROOMS = [
+    "Computer Lab",
+    "Physics Lab",
+    "Chemistry Lab",
+    "Biology Lab",
+    "Library",
+]
+
+# Generate class location mapping
+CLASS_LOCATIONS = {}
+for i, form in enumerate(FORMS):
+    for j, class_name in enumerate(CLASS_NAMES):
+        block = BLOCKS[(i + j) % len(BLOCKS)]
+        floor = FLOORS[(j) % len(FLOORS)]
+        CLASS_LOCATIONS[f"{form} {class_name}"] = {
+            "block": block,
+            "floor": floor,
+        }
+# Add special rooms
+for idx, room in enumerate(SPECIAL_ROOMS):
+    block = BLOCKS[idx % len(BLOCKS)]
+    floor = FLOORS[(idx + 1) % len(FLOORS)]
+    CLASS_LOCATIONS[room] = {"block": block, "floor": floor}
+
 
 def load_sample_data():
-    """Load sample teacher data"""
+    """Load sample teacher data with realistic consecutive teaching blocks and breaks between subjects."""
     sample_teachers = [
         {
             "id": 1,
-            "name": "Cikgu Rafiza",
+            "name": "Cikgu Aiman",
             "subjects": ["Math", "Add Maths"],
             "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[3],
-                TIME_FRAMES[7],
-                TIME_FRAMES[12],
+                "9:00-9:30",
+                "11:00-11:30",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
             ],
             "constraints": "",
             "relief_count": 0,
-            "other_duties": [TIME_FRAMES[5]],
+            "class_locations": {
+                # Math: 8:00-9:00 (2 periods)
+                "8:00-8:30": "Form 1 Amanah",
+                "8:30-9:00": "Form 1 Amanah",
+                # Add Maths: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 1 Bestari",
+                "10:30-11:00": "Form 1 Bestari",
+            },
         },
         {
             "id": 2,
-            "name": "Cikgu Farid",
-            "subjects": ["Chemistry", "Biology"],
+            "name": "Cikgu Bella",
+            "subjects": ["English"],
             "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[2],
-                TIME_FRAMES[8],
-                TIME_FRAMES[13],
+                "9:00-9:30",
+                "11:00-11:30",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
             ],
-            "constraints": "",
+            "constraints": "pregnant",
             "relief_count": 0,
-            "other_duties": [],
+            "class_locations": {
+                # English: 8:00-9:00 (2 periods)
+                "8:00-8:30": "Form 2 Amanah",
+                "8:30-9:00": "Form 2 Amanah",
+                # English: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 2 Bestari",
+                "10:30-11:00": "Form 2 Bestari",
+            },
         },
         {
             "id": 3,
-            "name": "Cikgu Riza",
-            "subjects": ["English"],
-            "free_periods": [TIME_FRAMES[1], TIME_FRAMES[4], TIME_FRAMES[9]],
-            "constraints": "pregnant",
+            "name": "Cikgu Chan",
+            "subjects": ["Science", "Biology"],
+            "free_periods": [
+                "9:00-9:30",
+                "11:00-11:30",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "no_upstairs",
             "relief_count": 0,
-            "other_duties": [TIME_FRAMES[11]],
+            "class_locations": {
+                # Science: 8:00-9:00 (2 periods)
+                "8:00-8:30": "Form 3 Amanah",
+                "8:30-9:00": "Form 3 Amanah",
+                # Biology: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 3 Bestari",
+                "10:30-11:00": "Form 3 Bestari",
+            },
         },
         {
             "id": 4,
-            "name": "Cikgu Ahmad",
+            "name": "Cikgu Diana",
             "subjects": ["Sejarah", "Bahasa Melayu"],
             "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[3],
-                TIME_FRAMES[6],
-                TIME_FRAMES[10],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 5,
-            "name": "Cikgu Meriani",
-            "subjects": ["Prinsip Perakaunan", "Ekonomi"],
-            "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[4],
-                TIME_FRAMES[8],
-                TIME_FRAMES[12],
-            ],
-            "constraints": "no_upstairs",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 6,
-            "name": "Cikgu Jamal",
-            "subjects": ["Grafik Komunikasi Teknikal"],
-            "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[3],
-                TIME_FRAMES[9],
-                TIME_FRAMES[13],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 7,
-            "name": "Cikgu Nisa",
-            "subjects": ["Perniagaan", "Pendidikan Seni Visual"],
-            "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[2],
-                TIME_FRAMES[6],
-                TIME_FRAMES[10],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 8,
-            "name": "Cikgu Omar",
-            "subjects": ["Computer Science", "Geografi"],
-            "free_periods": [
-                TIME_FRAMES[3],
-                TIME_FRAMES[5],
-                TIME_FRAMES[9],
-                TIME_FRAMES[12],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[7]],
-        },
-        # --- Additional teachers for realistic simulation ---
-        {
-            "id": 9,
-            "name": "Cikgu Siti",
-            "subjects": ["Math", "Science"],
-            "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[6],
-                TIME_FRAMES[8],
-                TIME_FRAMES[11],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 10,
-            "name": "Cikgu Zainal",
-            "subjects": ["Physics"],
-            "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[5],
-                TIME_FRAMES[10],
-                TIME_FRAMES[13],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 11,
-            "name": "Cikgu Aina",
-            "subjects": ["Biology", "Science"],
-            "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[4],
-                TIME_FRAMES[7],
-                TIME_FRAMES[12],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[8]],
-        },
-        {
-            "id": 12,
-            "name": "Cikgu Hafiz",
-            "subjects": ["English", "Literature"],
-            "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[5],
-                TIME_FRAMES[9],
-                TIME_FRAMES[13],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 13,
-            "name": "Cikgu Nor",
-            "subjects": ["Bahasa Melayu", "Moral"],
-            "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[3],
-                TIME_FRAMES[6],
-                TIME_FRAMES[10],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[1]],
-        },
-        {
-            "id": 14,
-            "name": "Cikgu Faizal",
-            "subjects": ["History", "Sejarah"],
-            "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[4],
-                TIME_FRAMES[8],
-                TIME_FRAMES[11],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 15,
-            "name": "Cikgu Liyana",
-            "subjects": ["Math", "ICT"],
-            "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[5],
-                TIME_FRAMES[7],
-                TIME_FRAMES[12],
-            ],
-            "constraints": "pregnant",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 16,
-            "name": "Cikgu Roslan",
-            "subjects": ["Pendidikan Islam", "Moral"],
-            "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[3],
-                TIME_FRAMES[6],
-                TIME_FRAMES[10],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[9]],
-        },
-        {
-            "id": 17,
-            "name": "Cikgu Shima",
-            "subjects": ["Science", "Math"],
-            "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[4],
-                TIME_FRAMES[8],
-                TIME_FRAMES[13],
-            ],
-            "constraints": "no_upstairs",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 18,
-            "name": "Cikgu Daniel",
-            "subjects": ["English", "Geografi"],
-            "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[5],
-                TIME_FRAMES[9],
-                TIME_FRAMES[12],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[11]],
-        },
-        {
-            "id": 19,
-            "name": "Cikgu Aisyah",
-            "subjects": ["Ekonomi", "Prinsip Perakaunan"],
-            "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[3],
-                TIME_FRAMES[7],
-                TIME_FRAMES[10],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 20,
-            "name": "Cikgu Syed",
-            "subjects": ["Pendidikan Jasmani", "Sivik"],
-            "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[4],
-                TIME_FRAMES[8],
-                TIME_FRAMES[13],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[2]],
-        },
-        {
-            "id": 21,
-            "name": "Cikgu Lim",
-            "subjects": ["Chinese", "Math"],
-            "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[5],
-                TIME_FRAMES[9],
-                TIME_FRAMES[12],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [],
-        },
-        {
-            "id": 22,
-            "name": "Cikgu Kumar",
-            "subjects": ["Tamil", "Science"],
-            "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[3],
-                TIME_FRAMES[6],
-                TIME_FRAMES[10],
-            ],
-            "constraints": "",
-            "relief_count": 0,
-            "other_duties": [TIME_FRAMES[7]],
-        },
-        {
-            "id": 23,
-            "name": "Cikgu Halimah",
-            "subjects": ["Math", "Add Maths"],
-            "free_periods": [
-                TIME_FRAMES[1],
-                TIME_FRAMES[4],
-                TIME_FRAMES[8],
-                TIME_FRAMES[13],
+                "9:00-9:30",
+                "11:00-11:30",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
             ],
             "constraints": "MC",
             "relief_count": 0,
-            "other_duties": [],
+            "class_locations": {
+                # Sejarah: 8:00-9:00 (2 periods)
+                "8:00-8:30": "Form 4 Amanah",
+                "8:30-9:00": "Form 4 Amanah",
+                # Bahasa Melayu: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 4 Bestari",
+                "10:30-11:00": "Form 4 Bestari",
+            },
         },
         {
-            "id": 24,
-            "name": "Cikgu Zuraida",
-            "subjects": ["Science", "Biology"],
+            "id": 5,
+            "name": "Cikgu Elly",
+            "subjects": ["Physics"],
             "free_periods": [
-                TIME_FRAMES[2],
-                TIME_FRAMES[5],
-                TIME_FRAMES[7],
-                TIME_FRAMES[12],
+                "8:00-8:30",
+                "9:00-9:30",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
             ],
             "constraints": "",
             "relief_count": 0,
-            "other_duties": [],
+            "class_locations": {
+                # Physics: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Form 5 Amanah",
+                "9:00-9:30": "Form 5 Amanah",
+                # Physics: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 5 Bestari",
+                "11:00-11:30": "Form 5 Bestari",
+            },
         },
         {
-            "id": 25,
-            "name": "Cikgu Rahman",
-            "subjects": ["Physics", "Math"],
+            "id": 6,
+            "name": "Cikgu Farid",
+            "subjects": ["ICT", "Computer Science"],
             "free_periods": [
-                TIME_FRAMES[0],
-                TIME_FRAMES[3],
-                TIME_FRAMES[6],
-                TIME_FRAMES[10],
+                "8:00-8:30",
+                "9:00-9:30",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
             ],
             "constraints": "",
             "relief_count": 0,
-            "other_duties": [TIME_FRAMES[5]],
+            "class_locations": {
+                # ICT: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Computer Lab",
+                "9:00-9:30": "Computer Lab",
+                # Computer Science: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 3 Efisien",
+                "11:00-11:30": "Form 3 Efisien",
+            },
+        },
+        {
+            "id": 7,
+            "name": "Cikgu Hana",
+            "subjects": ["Pendidikan Seni Visual"],
+            "free_periods": [
+                "8:00-8:30",
+                "9:00-9:30",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {
+                # PSV: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Form 5 Efisien",
+                "9:00-9:30": "Form 5 Efisien",
+                # PSV: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 5 Fitrah",
+                "11:00-11:30": "Form 5 Fitrah",
+            },
+        },
+        {
+            "id": 8,
+            "name": "Cikgu Izzat",
+            "subjects": ["Pendidikan Jasmani"],
+            "free_periods": [
+                "8:00-8:30",
+                "9:30-10:00",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {
+                # PJ: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Form 3 Efisien",
+                "9:00-9:30": "Form 3 Efisien",
+                # PJ: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 3 Fitrah",
+                "11:00-11:30": "Form 3 Fitrah",
+            },
+        },
+        {
+            "id": 9,
+            "name": "Cikgu Julia",
+            "subjects": ["Ekonomi", "Prinsip Perakaunan"],
+            "free_periods": [
+                "8:00-8:30",
+                "9:30-10:00",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {
+                # Ekonomi: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Form 5 Amanah",
+                "9:00-9:30": "Form 5 Amanah",
+                # Prinsip Perakaunan: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 5 Bestari",
+                "11:00-11:30": "Form 5 Bestari",
+            },
+        },
+        {
+            "id": 10,
+            "name": "Cikgu Kamal",
+            "subjects": ["Geografi"],
+            "free_periods": [
+                "8:00-8:30",
+                "9:00-9:30",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {
+                # Geografi: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Form 1 Efisien",
+                "9:00-9:30": "Form 1 Efisien",
+                # Geografi: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 1 Fitrah",
+                "11:00-11:30": "Form 1 Fitrah",
+            },
+        },
+        {
+            "id": 11,
+            "name": "Cikgu Laila",
+            "subjects": ["Moral", "Sivik"],
+            "free_periods": [
+                "8:00-8:30",
+                "9:30-10:00",
+                "10:30-11:00",
+                "12:30-1:00 (Prayer/Lunch)",
+                "1:00-2:00 (Prayer/Lunch)",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {
+                # Moral: 8:30-9:30 (2 periods)
+                "8:30-9:00": "Form 3 Amanah",
+                "9:00-9:30": "Form 3 Amanah",
+                # Sivik: 10:00-11:00 (2 periods)
+                "10:00-10:30": "Form 3 Bestari",
+                "11:00-11:30": "Form 3 Bestari",
+            },
+        },
+        # Additional teachers for constraint testing
+        {
+            "id": 13,
+            "name": "Cikgu Relief",
+            "subjects": ["Any"],
+            "free_periods": [
+                "8:00-8:30",
+                "8:30-9:00",
+                "10:00-10:30",
+                "10:30-11:00",
+                "9:00-9:30",
+                "9:30-10:00",
+                "11:00-11:30",
+                "11:30-12:00",
+                "12:00-12:30",
+                "2:00-2:30",
+                "2:30-3:00",
+                "3:00-3:30",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {},
+        },
+        {
+            "id": 14,
+            "name": "Cikgu Pregnant",
+            "subjects": ["Math"],
+            "free_periods": [
+                "8:00-8:30",
+                "8:30-9:00",
+                "10:00-10:30",
+                "10:30-11:00",
+                "2:00-2:30",
+                "2:30-3:00",
+            ],
+            "constraints": "pregnant",
+            "relief_count": 0,
+            "class_locations": {},
+        },
+        {
+            "id": 15,
+            "name": "Cikgu MC",
+            "subjects": ["Science"],
+            "free_periods": [
+                "8:00-8:30",
+                "8:30-9:00",
+                "10:00-10:30",
+                "10:30-11:00",
+                "2:00-2:30",
+                "2:30-3:00",
+            ],
+            "constraints": "MC",
+            "relief_count": 0,
+            "class_locations": {},
+        },
+        {
+            "id": 16,
+            "name": "Cikgu NoUpstairs",
+            "subjects": ["English"],
+            "free_periods": [
+                "8:00-8:30",
+                "8:30-9:00",
+                "10:00-10:30",
+                "10:30-11:00",
+                "2:00-2:30",
+                "2:30-3:00",
+            ],
+            "constraints": "no_upstairs",
+            "relief_count": 0,
+            "class_locations": {},
+        },
+        {
+            "id": 17,
+            "name": "Cikgu Flexible",
+            "subjects": ["Math", "Science"],
+            "free_periods": [
+                "8:00-8:30",
+                "8:30-9:00",
+                "9:00-9:30",
+                "9:30-10:00",
+                "10:00-10:30",
+                "10:30-11:00",
+                "11:00-11:30",
+                "11:30-12:00",
+                "2:00-2:30",
+                "2:30-3:00",
+            ],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {},
+        },
+        {
+            "id": 18,
+            "name": "Cikgu Upstairs",
+            "subjects": ["Math"],
+            "free_periods": ["8:00-8:30", "8:30-9:00", "10:00-10:30", "10:30-11:00"],
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {},
+        },
+        {
+            "id": 19,
+            "name": "Cikgu Extra",
+            "subjects": ["Math", "English", "Science"],
+            "free_periods": TIME_FRAMES.copy(),
+            "constraints": "",
+            "relief_count": 0,
+            "class_locations": {},
         },
     ]
-
     st.session_state.teachers = sample_teachers
     st.session_state.teacher_relief_count = {
         teacher["id"]: 0 for teacher in sample_teachers
     }
-
-
-def add_teacher(name, subjects, free_periods, constraints, other_duties=None):
-    """Add new teacher"""
-    teacher_id = len(st.session_state.teachers) + 1
-    teacher = {
-        "id": teacher_id,
-        "name": name,
-        "subjects": subjects,
-        "free_periods": free_periods,
-        "constraints": constraints,
-        "relief_count": 0,
-        "other_duties": other_duties or [],
-    }
-    st.session_state.teachers.append(teacher)
-    st.session_state.teacher_relief_count[teacher_id] = 0
 
 
 def add_absence(teacher_id, subject, periods):
@@ -529,173 +565,192 @@ def calculate_subject_match_score(teacher_subjects, absence_subject):
 BREAK_PRAYER_PERIODS = [TIME_FRAMES[10], TIME_FRAMES[11]]  # 12:30-1:00, 1:00-2:00
 
 
+def group_periods_into_blocks(periods):
+    """Group a list of periods (strings) into consecutive blocks based on TIME_FRAMES order."""
+    if not periods:
+        return []
+    # Sort periods by TIME_FRAMES order
+    period_indices = sorted([TIME_FRAMES.index(p) for p in periods if p in TIME_FRAMES])
+    blocks = []
+    current_block = [period_indices[0]]
+    for idx in period_indices[1:]:
+        if idx == current_block[-1] + 1:
+            current_block.append(idx)
+        else:
+            blocks.append([TIME_FRAMES[i] for i in current_block])
+            current_block = [idx]
+    blocks.append([TIME_FRAMES[i] for i in current_block])
+    return blocks
+
+
 def generate_schedule_with_pulp():
-    """Generate relief schedule using PuLP optimization"""
-    # Clear previous result
+    """Generate relief schedule using PuLP optimization (block-based)."""
     st.session_state.relief_schedule = []
     st.session_state.optimization_results = {}
 
     if not st.session_state.absences or not st.session_state.teachers:
         return
 
-    # Expand absences: each period in an absence becomes a separate assignment need
-    expanded_absences = []
+    # Step 1: Group absences into blocks
+    block_absences = []
+    block_id_counter = 1
     for absence in st.session_state.absences:
-        for period in absence["periods"]:
-            expanded_absences.append(
+        blocks = group_periods_into_blocks(absence["periods"])
+        for block in blocks:
+            block_absences.append(
                 {
-                    "id": f"{absence['id']}_{period}",
+                    "block_id": f"{absence['id']}_block{block_id_counter}",
                     "teacher_id": absence["teacher_id"],
                     "teacher_name": absence["teacher_name"],
                     "subject": absence["subject"],
-                    "period": period,
+                    "period_block": block,  # list of periods
                     "assigned": False,
                     "relief_teacher": None,
                 }
             )
+            block_id_counter += 1
 
-    # Create the optimization problem
-    prob = pulp.LpProblem("Teacher_Relief_Assignment", pulp.LpMaximize)
-
-    # Sets
     teachers = st.session_state.teachers
-    absences = expanded_absences
+    absences = block_absences
 
-    # Decision variables: x[i,j] = 1 if teacher i is assigned to absence j
+    # Helper to check if a block is on 2nd/3rd floor
+    def is_upstairs(period_block, absent_teacher):
+        teacher = next(
+            (t for t in st.session_state.teachers if t["name"] == absent_teacher), None
+        )
+        if not teacher or not teacher.get("class_locations"):
+            return False
+        for period in period_block:
+            cname = teacher["class_locations"].get(period)
+            if cname:
+                loc = CLASS_LOCATIONS.get(cname, {})
+                if loc.get("floor") in ["2nd Floor", "3rd Floor"]:
+                    return True
+        return False
+
+    # Decision variables: x[teacher_id, block_id]
     x = {}
     for teacher in teachers:
         for absence in absences:
-            x[teacher["id"], absence["id"]] = pulp.LpVariable(
-                f"assign_teacher_{teacher['id']}_to_absence_{absence['id']}",
+            x[teacher["id"], absence["block_id"]] = pulp.LpVariable(
+                f"assign_teacher_{teacher['id']}_to_block_{absence['block_id']}",
                 cat="Binary",
             )
 
     # Objective function coefficients
     objective_coeff = {}
-
     for teacher in teachers:
         for absence in absences:
             coeff = 0
-
-            # Base assignment score
             coeff += 10
-
-            # Subject match bonus
             subject_match = calculate_subject_match_score(
                 teacher["subjects"], absence["subject"]
             )
             coeff += subject_match * 20
-
-            # Fair distribution: penalize teachers with more reliefs
             current_reliefs = st.session_state.teacher_relief_count.get(
                 teacher["id"], 0
             )
             coeff -= current_reliefs * 5
-
-            # Constraint penalties
             if teacher["constraints"] == "MC":
-                coeff -= 1000  # Effectively prevents assignment
+                coeff -= 1000  # Will be hard-constrained below
             elif teacher["constraints"] == "pregnant":
-                coeff -= 15  # Strong preference to avoid
+                coeff -= 15
             elif teacher["constraints"] == "no_upstairs":
-                coeff -= 5  # Mild penalty
+                # Mild penalty, but hard constraint below for upstairs
+                coeff -= 5
+            # Soft penalty: avoid assigning relief immediately after own class unless consecutive
+            first_period = absence["period_block"][0]
+            try:
+                idx = TIME_FRAMES.index(first_period)
+                if idx > 0:
+                    prev_period = TIME_FRAMES[idx - 1]
+                    if (
+                        prev_period not in teacher["free_periods"]
+                        and prev_period not in BREAK_PRAYER_PERIODS
+                    ):
+                        coeff -= 5
+            except Exception:
+                pass
+            # SOFT PENALTY: If teacher is not free for any period in the block, add a large penalty
+            for period in absence["period_block"]:
+                if period not in teacher["free_periods"]:
+                    coeff -= 100
+                if period in BREAK_PRAYER_PERIODS:
+                    coeff -= 100
+                if "other_duties" in teacher and period in teacher["other_duties"]:
+                    coeff -= 100
+            objective_coeff[teacher["id"], absence["block_id"]] = coeff
 
-            objective_coeff[teacher["id"], absence["id"]] = coeff
-
-    # Objective function: Maximize total assignment score
+    # Create the optimization problem
+    prob = pulp.LpProblem("Teacher_Relief_Assignment_Blocks", pulp.LpMaximize)
     prob += pulp.lpSum(
         [
-            objective_coeff[teacher["id"], absence["id"]]
-            * x[teacher["id"], absence["id"]]
+            objective_coeff[teacher["id"], absence["block_id"]]
+            * x[teacher["id"], absence["block_id"]]
             for teacher in teachers
             for absence in absences
         ]
     )
 
-    # Constraints
-
-    # Constraint 1: Each absence should be assigned to at most one teacher
+    # Constraint 1: Each block assigned to at most one teacher
     for absence in absences:
         prob += (
-            pulp.lpSum([x[teacher["id"], absence["id"]] for teacher in teachers]) <= 1,
-            f"Absence_{absence['id']}_max_one_teacher",
+            pulp.lpSum([x[teacher["id"], absence["block_id"]] for teacher in teachers])
+            <= 1,
+            f"Block_{absence['block_id']}_max_one_teacher",
         )
 
-    # Constraint 2: Teacher availability - can only be assigned if free during that period
-    for teacher in teachers:
-        for absence in absences:
-            # Exclude break/prayer periods and other duties
-            if (
-                absence["period"] not in teacher["free_periods"]
-                or absence["period"] in BREAK_PRAYER_PERIODS
-                or (
-                    "other_duties" in teacher
-                    and absence["period"] in teacher["other_duties"]
-                )
-            ):
-                prob += (
-                    x[teacher["id"], absence["id"]] == 0,
-                    f"Teacher_{teacher['id']}_not_free_period_{absence['period']}_absence_{absence['id']}",
-                )
-
-    # Soft penalty: Avoid assigning relief immediately after own class unless consecutive
-    for teacher in teachers:
-        for absence in absences:
-            # Find if teacher has a class in the period immediately before this absence
-            try:
-                idx = TIME_FRAMES.index(absence["period"])
-                if idx > 0:
-                    prev_period = TIME_FRAMES[idx - 1]
-                    # If previous period is not a free period, add penalty
-                    if (
-                        prev_period not in teacher["free_periods"]
-                        and prev_period not in BREAK_PRAYER_PERIODS
-                    ):
-                        # Add a soft penalty to the objective coefficient
-                        objective_coeff[teacher["id"], absence["id"]] -= 5
-            except Exception:
-                pass
-
-    # Constraint 3: Teacher cannot cover their own absence
-    for teacher in teachers:
-        for absence in absences:
-            if teacher["id"] == absence["teacher_id"]:
-                prob += (
-                    x[teacher["id"], absence["id"]] == 0,
-                    f"Teacher_{teacher['id']}_cannot_cover_own_absence_{absence['id']}",
-                )
-
-    # Constraint 4: MC constraint - teachers with MC exemption cannot be assigned
+    # Constraint 2: MC teachers cannot be assigned (hard constraint)
     for teacher in teachers:
         if teacher["constraints"] == "MC":
             for absence in absences:
                 prob += (
-                    x[teacher["id"], absence["id"]] == 0,
-                    f"Teacher_{teacher['id']}_MC_exemption_absence_{absence['id']}",
+                    x[teacher["id"], absence["block_id"]] == 0,
+                    f"Teacher_{teacher['id']}_MC_exemption_block_{absence['block_id']}",
                 )
 
-    # Constraint 5: Fair distribution - limit maximum assignments per teacher
-    max_assignments_per_teacher = max(1, len(absences) // len(teachers) + 1)
-    for teacher in teachers:
-        prob += (
-            pulp.lpSum([x[teacher["id"], absence["id"]] for absence in absences])
-            <= max_assignments_per_teacher,
-            f"Teacher_{teacher['id']}_max_assignments",
-        )
-
-    # Constraint 6: Pregnant teachers - limited assignment
+    # Constraint 3: Pregnant teachers - limited assignment (hard constraint)
     for teacher in teachers:
         if teacher["constraints"] == "pregnant":
             prob += (
-                pulp.lpSum([x[teacher["id"], absence["id"]] for absence in absences])
+                pulp.lpSum(
+                    [x[teacher["id"], absence["block_id"]] for absence in absences]
+                )
                 <= 1,
                 f"Teacher_{teacher['id']}_pregnant_limit",
             )
 
-    # Solve problem
-    prob.solve(pulp.PULP_CBC_CMD(msg=False))  # Supress solver output
+    # Constraint 4: NoUpstairs teachers cannot be assigned to 2nd/3rd floor (hard constraint)
+    for teacher in teachers:
+        if teacher["constraints"] == "no_upstairs":
+            for absence in absences:
+                if is_upstairs(absence["period_block"], absence["teacher_name"]):
+                    prob += (
+                        x[teacher["id"], absence["block_id"]] == 0,
+                        f"Teacher_{teacher['id']}_no_upstairs_block_{absence['block_id']}",
+                    )
 
-    # Store optimization results
+    # Constraint 5: Teacher cannot cover their own absence
+    for teacher in teachers:
+        for absence in absences:
+            if teacher["id"] == absence["teacher_id"]:
+                prob += (
+                    x[teacher["id"], absence["block_id"]] == 0,
+                    f"Teacher_{teacher['id']}_cannot_cover_own_block_{absence['block_id']}",
+                )
+
+    # Constraint 6: Fair distribution - limit maximum assignments per teacher
+    max_assignments_per_teacher = max(1, len(absences) // len(teachers) + 1)
+    for teacher in teachers:
+        prob += (
+            pulp.lpSum([x[teacher["id"], absence["block_id"]] for absence in absences])
+            <= max_assignments_per_teacher,
+            f"Teacher_{teacher['id']}_max_assignments",
+        )
+
+    # Solve problem
+    prob.solve(pulp.PULP_CBC_CMD(msg=False))
+
     st.session_state.optimization_results = {
         "status": pulp.LpStatus[prob.status],
         "objective_value": pulp.value(prob.objective),
@@ -706,85 +761,41 @@ def generate_schedule_with_pulp():
     # Extract solution and create relief schedule
     for teacher in teachers:
         for absence in absences:
-            if pulp.value(x[teacher["id"], absence["id"]]) == 1:
+            if pulp.value(x[teacher["id"], absence["block_id"]]) == 1:
                 relief_assignment = {
-                    "absence_id": absence["id"],
+                    "block_id": absence["block_id"],
                     "absent_teacher": absence["teacher_name"],
                     "subject": absence["subject"],
-                    "period": absence["period"],
+                    "period_block": absence["period_block"],
                     "relief_teacher": teacher["name"],
                     "relief_teacher_id": teacher["id"],
                     "status": "assigned",
-                    "assignment_score": objective_coeff[teacher["id"], absence["id"]],
+                    "assignment_score": objective_coeff[
+                        teacher["id"], absence["block_id"]
+                    ],
                 }
-
                 st.session_state.relief_schedule.append(relief_assignment)
-
-                # Update teacher relief count
                 teacher["relief_count"] += 1
                 st.session_state.teacher_relief_count[teacher["id"]] += 1
 
-                # Mark absence as assigned
-                # (not used in expanded absences, but kept for compatibility)
-
-    # Add unassigned absences
+    # Add unassigned blocks
     for absence in absences:
         assigned = any(
-            r["absence_id"] == absence["id"] and r["status"] == "assigned"
+            r["block_id"] == absence["block_id"] and r["status"] == "assigned"
             for r in st.session_state.relief_schedule
         )
         if not assigned:
             relief_assignment = {
-                "absence_id": absence["id"],
+                "block_id": absence["block_id"],
                 "absent_teacher": absence["teacher_name"],
                 "subject": absence["subject"],
-                "period": absence["period"],
+                "period_block": absence["period_block"],
                 "relief_teacher": "UNASSIGNED",
                 "relief_teacher_id": None,
                 "status": "unassigned",
                 "assignment_score": 0,
             }
             st.session_state.relief_schedule.append(relief_assignment)
-
-    # --- Post-processing: Combine unassigned classes in the same period ---
-    # 1. Group unassigned absences by period
-    period_to_unassigned = defaultdict(list)
-    for r in st.session_state.relief_schedule:
-        if r["status"] == "unassigned":
-            period_to_unassigned[r["period"]].append(r)
-
-    # 2. For each period with >1 unassigned, try to assign one available teacher to all
-    for period, unassigned_list in period_to_unassigned.items():
-        if len(unassigned_list) < 2:
-            continue  # Only combine if more than one unassigned
-        # Find available teacher for this period (allow assigning even if already assigned in this period)
-        available_teacher = None
-        for teacher in teachers:
-            # Skip if MC or not free or has other duties
-            if teacher["constraints"] == "MC":
-                continue
-            if period not in teacher["free_periods"]:
-                continue
-            if "other_duties" in teacher and period in teacher["other_duties"]:
-                continue
-            # Cannot cover own absence
-            if any(r["absent_teacher"] == teacher["name"] for r in unassigned_list):
-                continue
-            available_teacher = teacher
-            break
-        if available_teacher:
-            # Assign this teacher to all unassigned in this period
-            for r in unassigned_list:
-                r["relief_teacher"] = available_teacher["name"]
-                r["relief_teacher_id"] = available_teacher["id"]
-                r["status"] = "assigned"
-                r["assignment_score"] = (
-                    1  # Mark as special assignment (can adjust score logic)
-                )
-            available_teacher["relief_count"] += len(unassigned_list)
-            st.session_state.teacher_relief_count[available_teacher["id"]] += len(
-                unassigned_list
-            )
 
 
 def create_pdf_report(schedule_date):
@@ -828,10 +839,12 @@ def create_pdf_report(schedule_date):
     data = [
         ["Period", "Absent Teacher", "Subject", "Relief Teacher", "Status", "Score"]
     ]
-    for relief in sorted(st.session_state.relief_schedule, key=lambda x: x["period"]):
+    for relief in sorted(
+        st.session_state.relief_schedule, key=lambda x: x["period_block"]
+    ):
         data.append(
             [
-                str(relief["period"]),
+                str(relief["period_block"]),
                 relief["absent_teacher"],
                 relief["subject"],
                 relief["relief_teacher"],
@@ -911,12 +924,11 @@ def import_asc_timetables_data(uploaded_file):
 
             # Assuming Excel structure has columns: Teacher, Subject, Period
             for teacher_name in df["Teacher"].unique():
+                subjects_series = df[df["Teacher"] == teacher_name]["Subject"]
                 teacher_data = {
                     "id": len(st.session_state.teachers) + 1,
                     "name": teacher_name,
-                    "subjects": df[df["Teacher"] == teacher_name]["Subject"]
-                    .unique()
-                    .tolist(),
+                    "subjects": list(np.unique(subjects_series)),
                     "free_periods": [],
                     "constraints": "",
                     "relief_count": 0,
@@ -984,57 +996,21 @@ def main():
             st.success("Sample data loaded!")
             st.rerun()
 
-        st.subheader("Add New Teacher")
-        with st.form("add_teacher_form"):
-            teacher_name = st.text_input("Teacher Name", key="add_teacher_name")
-            subjects_input = st.multiselect(
-                "Subjects (select one or more)",
-                [
-                    "Math",
-                    "Add Maths",
-                    "Chemistry",
-                    "Biology",
-                    "English",
-                    "Sejarah",
-                    "Bahasa Melayu",
-                    "Prinsip Perakaunan",
-                    "Ekonomi",
-                    "Grafik Komunikasi Teknikal",
-                    "Perniagaan",
-                    "Pendidikan Seni Visual",
-                    "Computer Science",
-                    "Geografi",
-                ],
-                key="add_teacher_subjects",
-            )
-            periods_input = st.multiselect(
-                "Free Periods (select one or more time frames)",
-                TIME_FRAMES,
-                key="add_teacher_periods",
-            )
-            constraints = st.selectbox(
-                "Constraints",
-                ["", "no_upstairs", "pregnant", "MC"],
-                key="add_teacher_constraints",
-            )
-            other_duties_input = st.multiselect(
-                "Other Duties (lab, exam, etc.) - select time frames",
-                TIME_FRAMES,
-                key="add_teacher_other_duties",
-            )
-            submitted = st.form_submit_button("Add Teacher")
-            if submitted and teacher_name:
-                subjects = subjects_input
-                free_periods = periods_input
-                add_teacher(
-                    teacher_name,
-                    subjects,
-                    free_periods,
-                    constraints,
-                    other_duties_input,
-                )
-                st.success(f"Added {teacher_name}!")
-                st.rerun()
+        # --- Class Location Preview ---
+        st.subheader("🏫 Class Locations Preview")
+        for form in FORMS:
+            with st.expander(form):
+                for class_name in CLASS_NAMES:
+                    cname = f"{form} {class_name}"
+                    loc = CLASS_LOCATIONS.get(cname, {})
+                    st.markdown(
+                        f"**{class_name}**: {loc.get('block', '-')}, {loc.get('floor', '-')}"
+                    )
+        st.markdown("---")
+        st.subheader("Special Rooms")
+        for room in SPECIAL_ROOMS:
+            loc = CLASS_LOCATIONS.get(room, {})
+            st.markdown(f"**{room}**: {loc.get('block', '-')}, {loc.get('floor', '-')}")
 
     # Display current teachers
     if st.session_state.teachers:
@@ -1049,8 +1025,14 @@ def main():
                 )
                 if teacher["constraints"]:
                     st.write(f"**Constraints:** {teacher['constraints']}")
-                if teacher.get("other_duties"):
-                    st.write(f"**Other Duties:** {', '.join(teacher['other_duties'])}")
+                # Show class locations for teaching periods
+                if teacher.get("class_locations"):
+                    st.write("**Teaching Periods & Class Locations:**")
+                    for period, cname in teacher["class_locations"].items():
+                        loc = CLASS_LOCATIONS.get(cname, {})
+                        st.write(
+                            f"- {period}: {cname} ({loc.get('block', '-')}, {loc.get('floor', '-')})"
+                        )
                 if st.button("Remove Teacher", key=f"remove_teacher_{i}"):
                     st.session_state.teachers.pop(i)
                     st.session_state.teacher_relief_count.pop(teacher["id"], None)
@@ -1074,19 +1056,43 @@ def main():
                     f"{t['name']} (ID: {t['id']})": t["id"]
                     for t in st.session_state.teachers
                 }
-                selected_teacher = st.selectbox(
+                selected_teacher_label = st.selectbox(
                     "Absent Teacher", list(teacher_options.keys())
+                )
+                selected_teacher_id = teacher_options[selected_teacher_label]
+                selected_teacher = next(
+                    t
+                    for t in st.session_state.teachers
+                    if t["id"] == selected_teacher_id
                 )
                 selected_subjects = st.multiselect(
                     "Subject", all_subjects, max_selections=1
                 )
-                periods = st.multiselect("Periods (Time Frames)", TIME_FRAMES)
+                # Auto-select periods where the teacher is scheduled to teach the selected subject
+                auto_periods = []
+                if selected_subjects:
+                    subject = selected_subjects[0]
+                    for period, class_name in selected_teacher.get(
+                        "class_locations", {}
+                    ).items():
+                        if subject in selected_teacher["subjects"]:
+                            auto_periods.append(period)
+                # Show the periods as read-only info
+                if selected_subjects:
+                    st.markdown(
+                        f"**Affected Periods:** {', '.join(auto_periods) if auto_periods else 'None'}"
+                    )
 
                 submitted = st.form_submit_button("Add Absence")
-                if submitted and selected_teacher and selected_subjects and periods:
-                    teacher_id = teacher_options[selected_teacher]
+                if (
+                    submitted
+                    and selected_teacher_label
+                    and selected_subjects
+                    and auto_periods
+                ):
+                    teacher_id = selected_teacher_id
                     subject = selected_subjects[0]  # Only one subject allowed
-                    add_absence(teacher_id, subject, periods)
+                    add_absence(teacher_id, subject, auto_periods)
                     st.success("Absence Added!")
                     st.rerun()
         else:
@@ -1151,11 +1157,15 @@ def main():
         if st.session_state.relief_schedule:
             st.subheader("📊 Schedule Statistics")
 
-            total_absences = len(st.session_state.absences)
+            total_blocks = len(st.session_state.relief_schedule)
             assigned_reliefs = sum(
                 1 for r in st.session_state.relief_schedule if r["status"] == "assigned"
             )
-            unassigned_reliefs = total_absences - assigned_reliefs
+            unassigned_reliefs = sum(
+                1
+                for r in st.session_state.relief_schedule
+                if r["status"] == "unassigned"
+            )
             teachers_used = len(
                 set(
                     r["relief_teacher_id"]
@@ -1167,7 +1177,7 @@ def main():
             col_a, col_b, col_c, col_d = st.columns(4)
 
             with col_a:
-                st.metric("Total Absences", total_absences)
+                st.metric("Total Relief Blocks", total_blocks)
             with col_b:
                 st.metric("Assigned", assigned_reliefs)
             with col_c:
@@ -1179,23 +1189,45 @@ def main():
     if st.session_state.relief_schedule:
         st.header("\U0001f4cb Optimized Relief Schedule")
 
-        # Create DataFrame for better display
+        # Helper to get class location for a block
+        def get_class_location(absent_teacher, period_block):
+            teacher = next(
+                (t for t in st.session_state.teachers if t["name"] == absent_teacher),
+                None,
+            )
+            if not teacher or not teacher.get("class_locations"):
+                return "-"
+            # Get all unique locations for the block
+            locations = set()
+            for period in period_block:
+                cname = teacher["class_locations"].get(period)
+                if cname:
+                    loc = CLASS_LOCATIONS.get(cname, {})
+                    locations.add(
+                        f"{cname} ({loc.get('block', '-')}, {loc.get('floor', '-')})"
+                    )
+            return ", ".join(locations) if locations else "-"
+
         df = pd.DataFrame(st.session_state.relief_schedule)
-        # Sort by time frame order
-        df["period_order"] = df["period"].apply(
-            lambda x: TIME_FRAMES.index(x) if x in TIME_FRAMES else -1
+        df["period_order"] = df["period_block"].apply(
+            lambda x: TIME_FRAMES.index(x[0]) if x[0] in TIME_FRAMES else -1
         )
         df = df.sort_values("period_order")
 
-        # Display assignment scores
+        # Add class location column
+        df["class_location"] = df.apply(
+            lambda row: get_class_location(row["absent_teacher"], row["period_block"]),
+            axis=1,
+        )
+
         display_df = df[
             [
-                "period",
+                "period_block",
                 "absent_teacher",
                 "subject",
                 "relief_teacher",
                 "status",
-                "assignment_score",
+                "class_location",
             ]
         ].copy()
         display_df.columns = [
@@ -1204,10 +1236,9 @@ def main():
             "Subject",
             "Relief Teacher",
             "Status",
-            "Score",
+            "Class Location",
         ]
 
-        # Style the dataframe
         def highlight_status(val):
             if val == "assigned":
                 return "background-color: #d4edda; color: #155724"
@@ -1229,7 +1260,6 @@ def main():
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            # CSV export
             csv = df.to_csv(index=False)
             st.download_button(
                 label="📊 Download CSV",
@@ -1239,7 +1269,6 @@ def main():
             )
 
         with col2:
-            # PDF export
             pdf_buffer = create_pdf_report(schedule_date)
             st.download_button(
                 label="📄 Download PDF",
@@ -1249,7 +1278,6 @@ def main():
             )
 
         with col3:
-            # Notification simulation
             if st.button("📱 Simulate Notifications"):
                 assigned_reliefs = [
                     r
@@ -1259,14 +1287,16 @@ def main():
                 if assigned_reliefs:
                     notifications = []
                     for relief in assigned_reliefs:
+                        class_location = get_class_location(
+                            relief["absent_teacher"], relief["period_block"]
+                        )
                         notifications.append(
                             f"📚 Relief Duty Alert\n"
                             f"{relief['relief_teacher']}: You have relief duty for {relief['subject']} "
-                            f"in Period {relief['period']}\n"
+                            f"in Period {relief['period_block']}\n"
                             f"Class: {relief['absent_teacher']}'s class\n"
-                            f"Assignment Score: {relief.get('assignment_score', 'N/A')}"
+                            f"Class Location: {class_location}\n"
                         )
-
                     st.success(
                         f"Notifications prepared for {len(notifications)} teachers!"
                     )
@@ -1274,48 +1304,27 @@ def main():
                         for notification in notifications:
                             st.text(notification)
                             st.markdown("---")
-
                 else:
                     st.warning("No relief assignments to notify about.")
 
     # Information about the algorithm
     with st.expander("🧠 About the Algorithm"):
         st.markdown(
-            f"""
-        ### How the Algorithm Works (Phase 1)
+            """
+        ### How Does the Relief Scheduler Work?
 
-        **Absence Model:**
-        - Each absence entry can cover multiple periods (time frames).
-        - The scheduler expands each absence into individual period-based relief needs for optimization.
-        - The UI shows one absence per teacher per day, but the schedule assigns relief for each selected period.
+        1. **You tell the system which teachers are absent and when.**
+        2. **The system looks at all available teachers and their free times.**
+        3. **It tries to assign relief teachers so that:**
+           - Each block of consecutive absent periods is covered by one relief teacher.
+           - Teachers with medical leave or special conditions are not assigned.
+           - Pregnant teachers are only assigned once per day.
+           - Teachers are not given relief duties during their own classes or breaks.
+           - The workload is shared fairly among all teachers.
+        4. **The system finds the best possible arrangement and shows you the schedule.**
 
-        **Objective Function:**
-        - Maximizes total assignment score across all relief assignments (per period)
-        - Subject match: +20 points for matching subjects
-        - Base assignment: +10 points per assignment
-        - Fair distribution: -5 points per existing relief count
-        - Penalties for constraints: Medical (-1000), Pregnant (-15), No upstairs (-5)
-        - Soft penalty: -5 if relief is assigned immediately after a teacher's own class (unless consecutive)
-
-        **Hard Constraints:**
-        1. Each period of absence assigned to at most one relief teacher
-        2. Teachers only assigned during their free periods (time frames)
-        3. Teachers cannot cover their own absences
-        4. Medical exemption teachers cannot be assigned
-        5. Fair distribution limits per teacher
-        6. Pregnant teachers limited to max 1 assignment per day
-        7. No relief assignments during break/prayer periods (e.g., 1:00-2:00)
-        8. No relief assignments if teacher has other duties (lab, exam, etc.) during that period
-
-        **Additional Features:**
-        - Teachers' free periods and other duties are customizable in the UI.
-        - Break/prayer periods are excluded from relief assignment.
-
-        **Optimization Engine:**
-        - Uses CBC (Coin-or Branch and Cut) solver via PuLP
-        - Binary decision variables for each teacher-absence-period pair
-        - Guarantees optimal solution within constraints
-        - Handles complex constraint interactions automatically
+        **In short:**  
+        The system automatically finds the best way to cover absent teachers, following school rules and teacher needs, so you don't have to do it by hand.
         """
         )
 
