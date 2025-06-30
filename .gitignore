@@ -2,4 +2,4 @@
 *.docx
 
 # Ignore Markdown files
-*.md
+project-brief.md
