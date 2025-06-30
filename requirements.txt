@@ -5,3 +5,5 @@ pulp>=2.7.0
 reportlab>=4.0.0
 openpyxl>=3.1.0
 lxml>=4.9.0
+matplotlib>=3.5.0
+seaborn>=0.11.0

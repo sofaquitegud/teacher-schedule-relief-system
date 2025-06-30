@@ -14,6 +14,10 @@ import tempfile
 import os
 from collections import defaultdict
 from itertools import groupby
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.patches import Rectangle, FancyBboxPatch
+import seaborn as sns
 
 # Configure Streamlit page
 st.set_page_config(
@@ -959,6 +963,149 @@ def import_asc_timetables_data(uploaded_file):
         return 0
 
 
+def create_school_map():
+    """Create a visual representation of the school map with blocks, floors, and class locations."""
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+
+    # Color scheme
+    colors_scheme = {
+        "Block A": "#FF6B6B",  # Red
+        "Block B": "#4ECDC4",  # Teal
+        "Block C": "#45B7D1",  # Blue
+        "Special": "#96CEB4",  # Green
+    }
+
+    # Floor positions (y-axis)
+    floor_positions = {
+        "Ground Floor": 0,
+        "1st Floor": 1,
+        "2nd Floor": 2,
+        "3rd Floor": 3,
+    }
+
+    # Block positions (x-axis)
+    block_positions = {"Block A": 0, "Block B": 1, "Block C": 2}
+
+    # Collect classes for each (block, floor)
+    cell_classes = {
+        (block, floor): [] for block in block_positions for floor in floor_positions
+    }
+    for class_name, location in CLASS_LOCATIONS.items():
+        block = location["block"]
+        floor = location["floor"]
+        if block in block_positions and floor in floor_positions:
+            cell_classes[(block, floor)].append(class_name)
+
+    # Draw floor lines
+    for floor, y in floor_positions.items():
+        ax.axhline(y=y - 0.4, color="gray", alpha=0.3, linestyle="-", linewidth=1)
+        ax.text(-0.5, y, floor, fontsize=10, ha="right", va="center", fontweight="bold")
+
+    # Draw block lines
+    for block, x in block_positions.items():
+        ax.axvline(x=x - 0.4, color="gray", alpha=0.3, linestyle="-", linewidth=1)
+        ax.text(
+            x,
+            -0.5,
+            block,
+            fontsize=10,
+            ha="center",
+            va="top",
+            fontweight="bold",
+            rotation=0,
+        )
+
+    # Plot classes in a grid within each cell
+    class_count = 0
+    for (block, floor), class_list in cell_classes.items():
+        x = block_positions[block]
+        y = floor_positions[floor]
+        n = len(class_list)
+        if n == 0:
+            continue
+        # Arrange in 2 columns, up to 3 rows (for up to 6 classes)
+        cols = 2
+        rows = (n + 1) // 2 if n > 2 else 1 if n == 1 else 2
+        for idx, class_name in enumerate(class_list):
+            row = idx // cols
+            col = idx % cols
+            # Offset within cell
+            x_offset = (col - 0.5) * 0.35 if cols > 1 else 0
+            y_offset = (0.5 - row) * 0.25 if rows > 1 else 0
+            # Determine color
+            if "Lab" in class_name or class_name == "Library":
+                color = colors_scheme["Special"]
+            else:
+                color = colors_scheme[block]
+            # Draw mini-rectangle
+            rect = FancyBboxPatch(
+                (x + x_offset - 0.15, y + y_offset - 0.10),
+                0.3,
+                0.2,
+                boxstyle="round,pad=0.02",
+                facecolor=color,
+                edgecolor="black",
+                linewidth=1,
+                alpha=0.8,
+            )
+            ax.add_patch(rect)
+            # Add class name
+            ax.text(
+                x + x_offset,
+                y + y_offset,
+                class_name.replace("Form ", ""),
+                fontsize=8,
+                ha="center",
+                va="center",
+                fontweight="bold",
+            )
+            class_count += 1
+
+    # Set up the plot
+    ax.set_xlim(-0.8, 2.8)
+    ax.set_ylim(-0.8, 3.8)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # Add title
+    ax.text(
+        1,
+        3.5,
+        "School Campus Map",
+        fontsize=16,
+        ha="center",
+        va="center",
+        fontweight="bold",
+    )
+
+    # Add legend
+    legend_elements = [
+        patches.Patch(color=colors_scheme["Block A"], label="Block A"),
+        patches.Patch(color=colors_scheme["Block B"], label="Block B"),
+        patches.Patch(color=colors_scheme["Block C"], label="Block C"),
+        patches.Patch(color=colors_scheme["Special"], label="Special Rooms"),
+    ]
+    ax.legend(handles=legend_elements, loc="upper right", bbox_to_anchor=(0.98, 0.98))
+
+    # Add statistics
+    ax.text(
+        1, -0.6, f"Total Classes: {class_count}", fontsize=10, ha="center", va="center"
+    )
+
+    plt.tight_layout()
+    return fig
+
+
+def download_school_map():
+    """Create a downloadable version of the school map."""
+    fig = create_school_map()
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
+    buffer.seek(0)
+    plt.close(fig)
+    return buffer
+
+
 def main():
     # Header
     st.markdown(
@@ -995,6 +1142,23 @@ def main():
             load_sample_data()
             st.success("Sample data loaded!")
             st.rerun()
+
+        # --- School Map Section ---
+        st.markdown("---")
+        st.subheader("🏫 School Campus Map")
+
+        # Display the map
+        fig = create_school_map()
+        st.pyplot(fig)
+
+        # Download option
+        map_buffer = download_school_map()
+        st.download_button(
+            label="📥 Download School Map",
+            data=map_buffer,
+            file_name="school-campus-map.png",
+            mime="image/png",
+        )
 
         # --- Class Location Preview ---
         st.subheader("🏫 Class Locations Preview")
