@@ -1176,31 +1176,21 @@ def main():
             loc = CLASS_LOCATIONS.get(room, {})
             st.markdown(f"**{room}**: {loc.get('block', '-')}, {loc.get('floor', '-')}")
 
-    # Display current teachers
+    # Display current teachers as a table
     if st.session_state.teachers:
         st.subheader("Current Teachers")
-        for i, teacher in enumerate(st.session_state.teachers):
-            with st.expander(
-                f"{teacher['name']} (Relief Count: {teacher['relief_count']})"
-            ):
-                st.write(f"**Subjects:** {', '.join(teacher['subjects'])}")
-                st.write(
-                    f"**Free Periods:** {', '.join(map(str, teacher['free_periods']))}"
-                )
-                if teacher["constraints"]:
-                    st.write(f"**Constraints:** {teacher['constraints']}")
-                # Show class locations for teaching periods
-                if teacher.get("class_locations"):
-                    st.write("**Teaching Periods & Class Locations:**")
-                    for period, cname in teacher["class_locations"].items():
-                        loc = CLASS_LOCATIONS.get(cname, {})
-                        st.write(
-                            f"- {period}: {cname} ({loc.get('block', '-')}, {loc.get('floor', '-')})"
-                        )
-                if st.button("Remove Teacher", key=f"remove_teacher_{i}"):
-                    st.session_state.teachers.pop(i)
-                    st.session_state.teacher_relief_count.pop(teacher["id"], None)
-                    st.rerun()
+        teachers_data = []
+        for teacher in st.session_state.teachers:
+            teachers_data.append(
+                {
+                    "Name": teacher["name"],
+                    "Subjects": ", ".join(teacher["subjects"]),
+                    "Constraints": teacher["constraints"],
+                    "Free Periods": ", ".join(map(str, teacher["free_periods"])),
+                }
+            )
+        teachers_df = pd.DataFrame(teachers_data)
+        st.dataframe(teachers_df, use_container_width=True)
 
     # Main content area
     col1, col2 = st.columns([1, 1])
@@ -1262,26 +1252,7 @@ def main():
         else:
             st.warning("Please add teachers first or load sample data.")
 
-        # Display current absences
-        if st.session_state.absences:
-            st.subheader("Today's Absences")
-            for i, absence in enumerate(st.session_state.absences):
-                st.markdown(
-                    f"""
-                <div class="absence-card">
-                    <strong>{absence['teacher_name']}</strong> - {absence['subject']} (Periods: {', '.join(absence['periods'])})
-                </div>
-                """,
-                    unsafe_allow_html=True,
-                )
-
-                if st.button(f"Remove", key=f"remove_absence_{i}"):
-                    st.session_state.absences.pop(i)
-                    st.rerun()
-
-    with col2:
         st.header("⚡ Generate Schedule")
-
         if st.button(
             "🚀 Generate Relief Schedule",
             type="primary",
@@ -1296,58 +1267,24 @@ def main():
                 st.warning(f"Optimization failed: {e}")
                 # Optionally, you can also log the error for debugging
 
-        # Display optimization info
-        if st.session_state.optimization_results:
-            st.markdown(
-                """
-            <div class="optimization-info">
-                <h4>🔬 Optimization Results</h4>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            results = st.session_state.optimization_results
-            col_a, col_b = st.columns(2)
-
-            with col_a:
-                st.metric("Status", results.get("status", "Unknown"))
-                st.metric("Variables", results.get("num_variables", 0))
-
-            with col_b:
-                st.metric("Objective Value", f"{results.get('objective_value', 0):.1f}")
-                st.metric("Constraints", results.get("num_constraints", 0))
-
-        if st.session_state.relief_schedule:
-            st.subheader("📊 Schedule Statistics")
-
-            total_blocks = len(st.session_state.relief_schedule)
-            assigned_reliefs = sum(
-                1 for r in st.session_state.relief_schedule if r["status"] == "assigned"
-            )
-            unassigned_reliefs = sum(
-                1
-                for r in st.session_state.relief_schedule
-                if r["status"] == "unassigned"
-            )
-            teachers_used = len(
-                set(
-                    r["relief_teacher_id"]
-                    for r in st.session_state.relief_schedule
-                    if r["relief_teacher_id"]
+    with col2:
+        st.header("Today's Absences")
+        if st.session_state.absences:
+            for i, absence in enumerate(st.session_state.absences):
+                st.markdown(
+                    f"""
+                <div class="absence-card">
+                    <strong>{absence['teacher_name']}</strong> - {absence['subject']} (Periods: {', '.join(absence['periods'])})
+                </div>
+                """,
+                    unsafe_allow_html=True,
                 )
-            )
 
-            col_a, col_b, col_c, col_d = st.columns(4)
-
-            with col_a:
-                st.metric("Total Relief Blocks", total_blocks)
-            with col_b:
-                st.metric("Assigned", assigned_reliefs)
-            with col_c:
-                st.metric("Unassigned", unassigned_reliefs)
-            with col_d:
-                st.metric("Teachers Used", teachers_used)
+                if st.button(f"Remove", key=f"remove_absence_{i}"):
+                    st.session_state.absences.pop(i)
+                    st.rerun()
+        else:
+            st.info("No absences recorded today.")
 
     # Relief Schedule Results
     if st.session_state.relief_schedule:
@@ -1419,8 +1356,30 @@ def main():
         )
         st.dataframe(styled_df, use_container_width=True)
 
-        # Export options
-        st.subheader("📤 Export Options")
+        # --- Relief Assignment Report ---
+        st.subheader("\U0001f9fe Relief Assignment Report")
+        # Count relief assignments per teacher (assigned only)
+        relief_counts = {}
+        for teacher in st.session_state.teachers:
+            relief_counts[teacher["name"]] = sum(
+                1
+                for r in st.session_state.relief_schedule
+                if r["relief_teacher"] == teacher["name"] and r["status"] == "assigned"
+            )
+        # Prepare DataFrame for display
+        relief_report_df = pd.DataFrame(
+            [
+                {"Teacher": name, "Total Relief Assignments": count}
+                for name, count in relief_counts.items()
+            ]
+        )
+        relief_report_df = relief_report_df.sort_values(
+            by="Total Relief Assignments", ascending=False
+        )
+        st.dataframe(relief_report_df, use_container_width=True)
+
+        # --- Export Options and Simulate Notifications ---
+        st.subheader("\U0001f4e4 Export & Notifications")
         col1, col2, col3 = st.columns(3)
 
         with col1:
